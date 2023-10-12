@@ -1,20 +1,24 @@
 from __future__ import annotations
-from datetime import datetime
+
 import time
 import json
+import traceback
+
+from datetime import datetime
+
+from selenium import webdriver
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-
 from selenium.webdriver.support import expected_conditions as EC
+
 import undetected_chromedriver as uc
 
 from dataclasses import dataclass, field
 from dataclasses_json import dataclass_json
 from copy import deepcopy
 
-import traceback
 
 from line_notify import LineNotify
 
@@ -217,12 +221,11 @@ def finder_himart2(driver, url):
 
 
 def main():
-    path = "C:\\Users\\BYEONGGIL\\Desktop\\chromium\\chromedriver.exe"
-
-    service = Service(path)
+    service = Service()
     options = webdriver.ChromeOptions()
     # options.add_argument("headless")
     driver = webdriver.Chrome(service=service, options=options)
+    driver.get("https://www.google.com")
 
     send_msg("start")
 
