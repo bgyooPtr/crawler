@@ -7,6 +7,7 @@ import traceback
 from datetime import datetime
 
 from selenium import webdriver
+import selenium.common.exceptions as EX
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -24,6 +25,43 @@ from line_notify import LineNotify
 
 line = LineNotify()
 send_msg = line.send_msg
+
+@dataclass_json
+@dataclass(eq=True)
+class CrawlingData:
+    name: str = field(compare=True)
+    url: str = field(compare=False)
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def get(self):
+        return (self.name, self.url)
+
+    @staticmethod
+    def saves(path: str, data: set[CrawlingData]):
+        with open(path, "w", encoding='utf-8') as f:
+            f.write(json.dumps([d.to_dict() for d in data], indent=4))
+
+    @staticmethod
+    def loads(path: str) -> set[CrawlingData]:
+        buf = ""
+        try:
+            with open(path, "r", encoding='utf-8') as f:
+                for line in f:
+                    buf += line
+            dict_data = json.loads(buf)
+
+            data = set()
+            for d in dict_data:
+                name = d.get("name", None)
+                url = d.get("url", None)
+                if name and url:
+                    data.add(CrawlingData(name, url))
+        except FileNotFoundError:
+            data = set()
+        return data
+
 
 
 def init_driver(url):
@@ -60,77 +98,61 @@ def finder_11st(driver, url):
             send_msg(f"11st {k} !! \n{url}")
 
 
-@dataclass_json
-@dataclass(eq=True)
-class CrawlingData:
-    name: str = field(compare=True)
-    url: str = field(compare=False)
-
-    def __hash__(self):
-        return hash(self.name)
-
-    def get(self):
-        return (self.name, self.url)
-
-    @staticmethod
-    def saves(path: str, data: set[CrawlingData]):
-        with open(path, "w") as f:
-            f.write(json.dumps([d.to_dict() for d in data], indent=4))
-
-    @staticmethod
-    def loads(path: str) -> set[CrawlingData]:
-        buf = ""
-        with open(path, "r") as f:
-            for line in f:
-                buf += line
-        dict_data = json.loads(buf)
-
-        data = set()
-        for d in dict_data:
-            name = d.get("name", None)
-            url = d.get("url", None)
-            if name and url:
-                data.add(CrawlingData(name, url))
-        return data
-
-
 def finder_ssg(driver, url):
     driver.get(url)
+    driver.execute_script("window.scrollTo(0,document.body.scrollHeight)")
+    time.sleep(3)
     db_file = "data.json"
 
     prev_data: set[CrawlingData] = CrawlingData.loads(db_file)
     data: set[CrawlingData] = set()
 
     try:
-        title = WebDriverWait(driver, 3).until(
-            EC.presence_of_element_located(
-                (By.XPATH, '//*[@id="_section7000792228"]/div[1]')
-            )
-        )
+        # title = WebDriverWait(driver, 3).until(
+        #     EC.presence_of_element_located(
+        #         (By.XPATH, '//*[@id="_section7000792228"]/div[1]')
+        #     )
+        # )
+        # /html/body/div[4]/div[5]/div/div[2]/div/div[2]/div[1]/div[1]/div/h3
+        # title = driver.find_element(By.XPATH, '/html/body/div[4]/div[5]/div/div[2]/div/div[2]/div').find_elements(By.TAG_NAME, "li")
+        grid = driver.find_element(By.XPATH, '//*[@id="_grid_infinite"]').find_elements(By.CLASS_NAME, 'grid_section')
+        
+        i256 = None
+        for g in grid:
+            title = g.find_element(By.TAG_NAME, "h3")
+            if title.text == "iPhone 15 Pro":
+                i256 = g
 
-        if "iPhone 15 Pro" not in [
-            e.text for e in title.find_elements(By.TAG_NAME, "h3")
-        ]:
+        # if "iPhone 15 Pro" not in [
+        #     e.text for e in title
+        # ]:
+        if i256 is None:
             print("ssg: Could not find iPhone 15 Pro")
             return
-    except Exception as e:
+    except EX.WebDriverException as e:
         print(f"ssg Exception: {e}")
         return
+    except Exception as e:
+        print(e)
+        return
 
-    items = title.find_element(By.XPATH, "following-sibling::*[1]").find_elements(
-        By.TAG_NAME, "li"
-    )
+    items = i256.find_elements(By.TAG_NAME, "li")
+    print('ssg: ', len(items))
 
     for i in items:
         data.add(
             CrawlingData(i.text, i.find_element(By.TAG_NAME, "a").get_attribute("href"))
         )
-    if prev_data == data:
-        print(f"ssg is not changed: {len(prev_data)}")
-    else:
-        send_msg(f"ssg is changed {len(prev_data)}->{len(data)}: {url}")
-        prev_data = deepcopy(data)
-        CrawlingData.saves(db_file, data)
+        tmp = CrawlingData(i.text, i.find_element(By.TAG_NAME, "a").get_attribute("href"))
+        if (i.text.find("네츄럴") or i.text.find("내츄럴") or i.text.find('내추럴') or i.text.find('네추럴')) != -1 and (i.text.find('256GB') or i.tet.find('128GB')) != -1:
+            send_msg(f"ssg: {tmp.name}\n{tmp.url}\n{url}")
+            
+    # if prev_data == data:
+    #     print(f"ssg is not changed: {len(prev_data)}")
+    # else:
+    #     send_msg(f"ssg is changed {len(prev_data)}->{len(data)}: {url}")
+    #     prev_data = deepcopy(data)
+    #     CrawlingData.saves(db_file, data)
 
 
 def finder_wemap(driver, url):
@@ -254,10 +276,11 @@ def main():
             #     driver,
             #     "https://front.wemakeprice.com/deal/629557808?utm_source=linkprice&utm_medium=AF_af&utm_campaign=null",
             # )
-            finder_himart(driver, himart_url)
+            # finder_himart(driver, himart_url)
         except Exception as e:
+            print(e)
             # traceback.print_exc()
-            pass
+            # pass
 
         print(f'timestamp: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
         time.sleep(3)
